@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Stayora"
+description = "A full-stack vacation rental marketplace for discovering, saving, and booking stays across India, with an explainable preference-based recommendation engine and reproducible research evaluation."
+version = "1.0.0"
+id = "artifacts/stayora"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25854
+
+[services.development]
+run = "pnpm --filter @workspace/stayora run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/stayora", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/stayora/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25854"
+BASE_PATH = "/"

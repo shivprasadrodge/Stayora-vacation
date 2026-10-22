@@ -1,0 +1,343 @@
+# Build Stayora — An AI-Powered Vacation Rental Marketplace
+
+Act as a senior full-stack software engineer, UI/UX designer, database architect, and software tester. Build a complete, functional, responsive vacation rental marketplace called **Stayora**, inspired by Airbnb, with its own original branding and design.
+
+The goal is to create a working full-stack college project that can be developed within approximately two days and later used for a research paper on personalized property recommendation systems.
+
+**Important:** Do not build only a static UI or landing page. Implement the frontend, backend, database, authentication, property management, booking workflow, and recommendation algorithm. Make reasonable decisions without repeatedly asking me questions.
+
+## 1. Technology stack
+
+Use the following stack:
+
+- Frontend: React with Vite and TypeScript.
+- Styling: Tailwind CSS.
+- UI components and icons: shadcn/ui and Lucide React where appropriate.
+- Backend: Node.js with Express and TypeScript.
+- Database: PostgreSQL.
+- ORM: Prisma.
+- Authentication: secure session-based authentication or an equivalent secure authentication implementation.
+- Form validation: Zod.
+- Charts: Recharts for the admin dashboard and research metrics.
+- Image handling: use reliable external demo image URLs initially; structure the application so image uploads can be added later.
+- Testing: Vitest and appropriate API tests.
+
+Use Replit's supported database and deployment facilities. Store secrets in environment variables. Do not hardcode credentials.
+
+Keep the application in one Replit project, with a clear separation between frontend, backend, database schema, and shared types.
+
+If a requested service is unavailable, implement a working alternative and explain the limitation.
+
+## 2. Brand and UI/UX design
+
+Brand name: Stayora.
+
+Tagline: Find a place that feels like yours.
+
+Design an elegant, modern vacation rental marketplace with an original identity rather than copying Airbnb's exact interface.
+
+Visual direction:
+- Warm off-white background.
+- Dark charcoal typography.
+- Teal or deep green accent color.
+- Clean cards with rounded corners.
+- High-quality property photography.
+- Subtle hover transitions and smooth interactions.
+- Responsive layouts for mobile, tablet, and desktop.
+- Clear typography, whitespace, accessible contrast, and loading states.
+
+Create a reusable navbar containing the Stayora logo, destination search, wishlist access, login/profile menu, and a host property link.
+
+Create a footer with About, Contact, Privacy Policy, Terms, and Help links.
+
+## 3. Pages and routes
+
+Build these pages with real navigation:
+
+1. Home page (`/`)
+   - Hero section with destination search.
+   - Search fields for destination, check-in, check-out, and guests.
+   - Popular destinations.
+   - Featured properties.
+   - Recommended for you section.
+   - Categories such as apartments, villas, cottages, and unique stays.
+   - Call to action for property hosts.
+
+2. Explore page (`/explore`)
+   - Responsive property grid.
+   - Search by city or destination.
+   - Filters for price range, property type, bedrooms, bathrooms, amenities, and guest capacity.
+   - Sort by price, rating, and relevance.
+   - Grid/list toggle if practical.
+   - Empty, loading, and error states.
+
+3. Property details page (`/properties/:id`)
+   - Property photo gallery.
+   - Name, location, description, amenities, guest capacity, bedrooms, bathrooms, and host details.
+   - Average rating and review list.
+   - Price per night and booking summary.
+   - Check-in/check-out date selection and guest count.
+   - Availability validation and total price calculation.
+   - Book Now and Add to Wishlist buttons.
+
+4. Authentication pages
+   - Sign up.
+   - Login.
+   - Logout.
+   - Form validation and understandable errors.
+
+5. Wishlist page (`/wishlist`)
+   - Display saved properties.
+   - Add and remove properties.
+   - Persist the wishlist for logged-in users.
+
+6. My Bookings page (`/bookings`)
+   - Display upcoming and previous bookings.
+   - Show booking dates, guests, property details, and total price.
+   - Allow cancellation according to the application's cancellation rules.
+
+7. Host dashboard (`/host`)
+   - Create, edit, and delete property listings.
+   - Manage property descriptions, prices, locations, capacity, amenities, and image URLs.
+   - View bookings associated with the host's listings.
+   - Prevent users from editing properties they do not own.
+
+8. Admin dashboard (`/admin`)
+   - Restricted to administrator accounts.
+   - Show counts for users, properties, bookings, and reviews.
+   - Show booking trends and popular properties.
+   - Provide basic property and user management.
+
+9. Profile page (`/profile`)
+   - Edit name and basic profile information.
+   - Manage account details.
+
+10. Not-found page
+   - Display a useful message and a link back to the homepage.
+
+## 4. Database design
+
+Create a proper relational PostgreSQL database using Prisma.
+
+Include these entities and relationships:
+
+- User: id, name, email, password hash, role, createdAt.
+- Property: id, hostId, title, description, city, country, address, latitude, longitude, pricePerNight, propertyType, maxGuests, bedrooms, bathrooms, amenities, image URLs, average rating, createdAt.
+- Booking: id, userId, propertyId, checkIn, checkOut, guests, totalPrice, status, createdAt.
+- Review: id, userId, propertyId, bookingId if applicable, rating, comment, createdAt.
+- Wishlist: id, userId, propertyId, createdAt.
+- UserPreference: id, userId, preferredDestinations, preferredPropertyTypes, preferredAmenities, budgetMin, budgetMax, preferredGuests.
+
+Add appropriate foreign keys, uniqueness constraints, validation, and database indexes.
+
+Prevent overlapping confirmed bookings for the same property and dates. Validate date ranges, guest limits, ownership, and prices on the server. Do not rely only on frontend validation.
+
+Store passwords as secure hashes. Never store plaintext passwords.
+
+## 5. Backend API
+
+Implement REST APIs for:
+
+- Authentication and current-user information.
+- Property listing, property details, search, filters, and sorting.
+- Property creation, editing, and deletion.
+- Booking creation, availability checking, listing, and cancellation.
+- Reviews and ratings.
+- Wishlist management.
+- User preferences.
+- Personalized recommendations.
+- Admin statistics and authorized management.
+
+Use clear route organization, reusable middleware, centralized error handling, and consistent JSON responses.
+
+Protect private routes with authentication. Apply role-based authorization for hosts and administrators. Validate incoming request data using Zod.
+
+Never trust the user ID, role, price, or ownership supplied by the client. Derive identity from the authenticated session and calculate booking prices on the server.
+
+Use database transactions where needed to avoid inconsistent bookings. Prevent race conditions when multiple users attempt to book the same property.
+
+## 6. Personalized recommendation engine — the core research feature
+
+Implement a transparent, explainable recommendation algorithm. Do not require a paid AI API.
+
+The recommendation system should rank available properties according to a user's preferences.
+
+Inputs:
+- Preferred destination.
+- Minimum and maximum budget.
+- Preferred property type.
+- Desired amenities.
+- Number of guests.
+- Optional user interaction history, such as wishlisted properties and previous bookings.
+
+Create a normalized weighted scoring algorithm, for example:
+
+- Destination match: 30%.
+- Budget suitability: 25%.
+- Amenity match: 20%.
+- Property type match: 15%.
+- Guest capacity suitability: 10%.
+
+Normalize the component scores to a value between 0 and 1 and calculate a final score between 0 and 100.
+
+Use documented scoring rules. Apply sensible partial matches where appropriate. For example, a property within the user's budget should score higher than an otherwise similar property that exceeds the budget.
+
+Filter out properties that cannot accommodate the requested guests or are unavailable for the selected dates.
+
+Sort results by recommendation score and return the highest-ranked properties.
+
+Create a dedicated recommendation service, separate from the API route handlers. Return the final score and a short explanation such as:
+- Matches your preferred destination.
+- Within your budget.
+- Includes three of your preferred amenities.
+- Suitable for your group size.
+
+If the user has not set preferences, show popular or highly rated properties and clearly label them as general recommendations.
+
+Provide a page or section called "Recommended for you" with an explanation of why each property is recommended.
+
+Include a simple preferences form where users can save or update their preferences.
+
+Do not claim that this is a machine-learning model or a generative AI system. It is a transparent, rule-based personalized recommendation engine.
+
+## 7. Research and evaluation module
+
+The project should support a research paper titled:
+
+"Design and Evaluation of a Preference-Based Property Recommendation System for Vacation Rental Marketplaces."
+
+Create a research dashboard that allows the developer or administrator to compare the recommendation engine against a baseline ranking method.
+
+Baseline:
+- Filter by the same basic constraints.
+- Rank matching properties by rating or popularity.
+
+Personalized method:
+- Rank properties using the weighted preference score.
+
+Evaluate both methods using a reproducible, locally generated test dataset and clearly defined relevance labels.
+
+Calculate and display:
+- Precision@5.
+- nDCG@5.
+- Average recommendation response time in milliseconds.
+- Number of evaluated users and properties.
+
+Use correctly defined metrics. For Precision@5, divide the number of relevant properties in the top five by five, or by the number returned if fewer than five are available, and document the convention. For nDCG@5, use a clearly defined relevance scale and the corresponding DCG and ideal DCG calculations.
+
+Allow the administrator to run an evaluation and display the results in tables and charts.
+
+Keep the test data and evaluation procedure reproducible. Clearly distinguish synthetic test data from real user activity. Do not fabricate experimental results or claim that the personalized method outperforms the baseline before measurements are run.
+
+## 8. Demo data
+
+Seed the database with approximately 20–30 realistic sample properties across Indian destinations such as Pune, Mumbai, Goa, Lonavala, Jaipur, and Bengaluru.
+
+Include a mixture of:
+- Apartments.
+- Villas.
+- Beach houses.
+- Cottages.
+- Homestays.
+- Luxury stays.
+
+Use realistic sample prices in INR, different amenities, capacities, ratings, and image URLs.
+
+Include sufficient sample users and preferences to demonstrate the recommendation algorithm.
+
+Provide a documented way to create a demo host and administrator account. Use development-only credentials from environment variables or a safe seed process. Do not expose production passwords in the source code.
+
+Ensure the homepage is populated on first launch.
+
+## 9. Booking and pricing logic
+
+Implement a working booking workflow.
+
+- The user selects check-in and check-out dates and the number of guests.
+- Check-out must be after check-in.
+- The property must support the requested number of guests.
+- Check availability on the server.
+- Calculate nights from the selected dates.
+- Calculate the total from the server-side nightly rate and any explicitly defined fees.
+- Display the price breakdown before confirmation.
+- Persist the booking in PostgreSQL.
+- Show a confirmation page or message.
+- Prevent overlapping bookings and repeated accidental submissions.
+
+Use a simulated payment status such as "Payment not integrated" or "Demo booking." Do not pretend to process real payments. Do not collect card details.
+
+## 10. Security and reliability
+
+Implement:
+- Secure password hashing.
+- Secure cookie/session settings.
+- Authentication and authorization middleware.
+- Input validation and output escaping where appropriate.
+- Protection against unauthorized data access.
+- Server-side booking validation.
+- Environment-based secrets.
+- Useful error messages without leaking stack traces or secrets.
+- Basic rate limiting on authentication routes.
+- Safe handling of database errors.
+- Responsive loading, empty, and failure states.
+
+Never expose database credentials, session secrets, or private environment variables to the frontend.
+
+## 11. Testing and acceptance criteria
+
+Write and run tests for at least:
+- Recommendation score calculation and ranking.
+- Budget and destination matching.
+- Guest-capacity validation.
+- Invalid booking date ranges.
+- Overlapping booking prevention.
+- Authentication and authorization.
+- Host property ownership.
+- Precision@5 and nDCG@5 calculations.
+
+Before declaring the project complete:
+
+1. Install all dependencies.
+2. Configure and migrate the database.
+3. Seed the database.
+4. Start the application.
+5. Fix compilation, runtime, and API errors.
+6. Test the main user workflows.
+7. Verify responsive layouts.
+8. Verify that data persists after a page refresh.
+9. Provide clear instructions to run the project in Replit.
+
+Do not stop after generating the initial files. Actually run the application and fix errors you encounter.
+
+## 12. Development priorities
+
+Build in this order:
+
+Phase 1: Project setup, database schema, seed data, homepage, and property cards.
+
+Phase 2: Property search, filtering, sorting, and property details.
+
+Phase 3: Authentication, preferences, wishlist, and host management.
+
+Phase 4: Booking workflow and booking conflict prevention.
+
+Phase 5: Personalized recommendations and explanations.
+
+Phase 6: Research evaluation dashboard, metrics, and tests.
+
+Phase 7: Final responsive styling, bug fixes, and deployment configuration.
+
+Prioritize a reliable end-to-end MVP over unnecessary complexity. If a feature threatens the two-day deadline, implement a simpler functional version while preserving the core recommendation and evaluation features.
+
+At completion, provide:
+- A summary of implemented features.
+- Project folder structure.
+- Database schema and migration status.
+- API route documentation.
+- Environment variables required.
+- How to start and deploy the app.
+- Demo account setup instructions.
+- Tests executed and their results.
+- Any incomplete features or limitations.
+
+**Final requirement:** Build Stayora as a genuinely functional full-stack application, not merely a visual prototype. The personalized recommendation engine and its measurable comparison against a baseline ranking method must work end to end.
