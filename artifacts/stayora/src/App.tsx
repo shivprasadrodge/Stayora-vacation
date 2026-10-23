@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { ClerkProvider, SignedIn, SignedOut, SignIn, SignUp, useAuth, useClerk } from '@clerk/react';
-import { shadcn } from '@clerk/themes';
+import { ClerkProvider, Show, SignIn, SignUp, useAuth, useClerk } from '@clerk/react';
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   useAddWishlist, useCancelBooking, useCreateBooking, useCreateHostListing,
   useDeleteAdminProperty, useDeleteHostListing, useGetAdminOverview, useGetAdminProperties, useGetAdminUsers, useGetBookings,
@@ -34,7 +34,6 @@ function stripBase(path: string) {
 if (!clerkPubKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
 
 const clerkAppearance = {
-  theme: shadcn,
   cssLayerName: 'clerk',
   options: {
     logoPlacement: 'inside' as const,
@@ -86,7 +85,13 @@ const money = (amount: number) => `₹${Math.round(amount).toLocaleString('en-IN
 const displayDate = (value?: string) => value ? new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 const fallbackImage = 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1000&q=85';
 const cities = ['Goa', 'Jaipur', 'Udaipur', 'Munnar', 'Alibaug', 'Rishikesh', 'Pondicherry', 'Coorg'];
-const types = ['Apartment', 'Villa', 'Cottage', 'Homestay', 'Cabin', 'Houseboat'];
+const types = ['Apartment', 'Villa', 'Cottage', 'Homestay', 'Beach house', 'Luxury stay', 'Unique stay'];
+const categories = [
+  { label: 'Apartments', propertyType: 'Apartment' },
+  { label: 'Villas', propertyType: 'Villa' },
+  { label: 'Cottages', propertyType: 'Cottage' },
+  { label: 'Unique stays', propertyType: 'Unique stay' },
+];
 const amenities = ['Wi-Fi', 'Pool', 'Kitchen', 'Air conditioning', 'Workspace', 'Pet friendly', 'Garden', 'Parking'];
 
 function Brand() {
@@ -95,8 +100,14 @@ function Brand() {
 
 function Header() {
   const [open, setOpen] = useState(false);
+  const [destination, setDestination] = useState('');
   const { signOut } = useClerk();
   const [, setLocation] = useLocation();
+  const searchDestination = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const city = destination.trim();
+    setLocation(city ? `/explore?city=${encodeURIComponent(city)}` : '/explore');
+  };
   const nav = [
     ['Explore', '/explore'], ['Saved', '/wishlist'], ['Your trips', '/bookings'],
     ['Host', '/host'], ['Preferences', '/preferences'], ['Admin', '/admin'],
@@ -104,22 +115,27 @@ function Header() {
   return <header className="stayora-nav" data-testid="site-header">
     <Brand />
     <nav className={`nav-links ${open ? 'mobile-open' : ''}`} aria-label="Main navigation">
+      <form onSubmit={searchDestination} role="search" className="nav-search-form" data-testid="form-navbar-search" style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#fffdf8', border: '1px solid #e5dfd3', borderRadius: 999, padding: '7px 10px' }}>
+        <Search size={15} color="#718078" />
+        <input aria-label="Search destination" placeholder="Where to?" value={destination} onChange={e => setDestination(e.target.value)} data-testid="input-navbar-destination" style={{ minWidth: 80, width: 125, border: 0, outline: 0, background: 'transparent', color: '#243b34', font: 'inherit', fontSize: 12 }} />
+        <button type="submit" aria-label="Search destinations" data-testid="button-navbar-search" style={{ border: 0, background: 'none', color: '#c65f42', padding: 2, cursor: 'pointer' }}><ArrowRight size={14} /></button>
+      </form>
       {nav.map(([label, href]) => <Link key={href} href={href} className="nav-link desktop-link" data-testid={`link-nav-${label.toLowerCase().replaceAll(' ', '-')}`}>{label}</Link>)}
-      <SignedOut>
+      <Show when="signed-out">
         <Link href="/sign-in" className="nav-link desktop-link" data-testid="link-sign-in">Sign in</Link>
         <Link href="/sign-up" className="btn-primary" data-testid="link-sign-up">Join Stayora <ArrowRight size={15} /></Link>
-      </SignedOut>
-      <SignedIn>
+      </Show>
+      <Show when="signed-in">
         <Link href="/profile" className="nav-link desktop-link" data-testid="link-profile">Account</Link>
         <button className="btn-secondary" data-testid="button-sign-out" onClick={() => signOut({ redirectUrl: basePath || '/' })}>Sign out</button>
-      </SignedIn>
+      </Show>
     </nav>
     <button className="mobile-menu" aria-label="Toggle navigation" data-testid="button-menu" onClick={() => setOpen(v => !v)}><Menu size={21} /></button>
   </header>;
 }
 
 function Layout({ children }: { children: ReactNode }) {
-  return <div className="stayora-shell"><Header />{children}<footer className="footer page-wrap"><span>Stayora · A better kind of getting away</span><span>Every stay, with a reason behind it.</span></footer></div>;
+  return <div className="stayora-shell"><Header />{children}<footer className="footer page-wrap"><span>Stayora · A better kind of getting away</span><nav aria-label="Stayora information" style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>{[['About', '/about'], ['Contact', '/contact'], ['Privacy', '/privacy'], ['Terms', '/terms'], ['Help', '/help']].map(([label, href]) => <Link key={href} href={href} className="nav-link" data-testid={`link-footer-${label.toLowerCase()}`}>{label}</Link>)}</nav><span>Every stay, with a reason behind it.</span></footer></div>;
 }
 
 function SectionTitle({ eyebrow, title, action }: { eyebrow?: string; title: string; action?: ReactNode }) {
@@ -136,12 +152,19 @@ function LoadingCards() {
 
 function PropertyCard({ property, reason, score }: { property: any; reason?: string[]; score?: number }) {
   const qc = useQueryClient();
-  const wishlist = useGetWishlist();
+  const { isLoaded, isSignedIn } = useAuth();
+  const [, setLocation] = useLocation();
+  const wishlist = useGetWishlist({ query: { enabled: isLoaded && isSignedIn === true } });
   const add = useAddWishlist();
   const remove = useRemoveWishlist();
   const isSaved = Boolean(wishlist.data?.some(p => p.id === property.id));
   const busy = add.isPending || remove.isPending;
   const toggle = () => {
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      setLocation('/sign-in');
+      return;
+    }
     const action = isSaved ? remove.mutate({ propertyId: property.id }) : add.mutate({ data: { propertyId: property.id } });
     void action;
     window.setTimeout(() => qc.invalidateQueries({ queryKey: getGetWishlistQueryKey() }), 250);
@@ -150,10 +173,10 @@ function PropertyCard({ property, reason, score }: { property: any; reason?: str
   return <article className="property-card" data-testid={`card-property-${property.id}`}>
     <Link href={`/properties/${property.id}`} className="property-image-wrap" data-testid={`link-property-${property.id}`}>
       <img className="property-image" src={cover} alt={property.title} loading="lazy" />
-      {reason?.length ? <span className="tag" style={{ position: 'absolute', left: 12, bottom: 12 }}>{score ? `${Math.round(score * 100)}% fit` : reason[0]}</span> : null}
+       {reason?.length ? <span className="tag" style={{ position: 'absolute', left: 12, bottom: 12 }}>{typeof score === 'number' ? `${Math.round(score)}% fit` : reason[0]}</span> : null}
     </Link>
     <button className="heart-button" aria-label={isSaved ? 'Remove from saved stays' : 'Save this stay'} data-testid={`button-save-${property.id}`} onClick={toggle} disabled={busy}><Heart size={18} fill={isSaved ? '#d66e4d' : 'none'} color={isSaved ? '#d66e4d' : 'currentColor'} /></button>
-    <div className="property-meta"><div><Link href={`/properties/${property.id}`} className="property-title" data-testid={`text-title-${property.id}`}>{property.title}</Link><div className="property-subtitle">{property.city}, {property.country} · {property.propertyType}</div>{reason?.[0] && <div className="property-subtitle" style={{ color: '#4f7161', marginTop: 7 }}><Sparkles size={12} style={{ verticalAlign: '-2px' }} /> {reason[0]}</div>}</div><div style={{ textAlign: 'right' }}><div className="rating-pill"><Star size={12} fill="#d66e4d" color="#d66e4d" /> {property.averageRating?.toFixed?.(1) || property.averageRating || 'New'}</div><div className="property-price" style={{ marginTop: 9 }}>{money(property.pricePerNight)} <span>/ night</span></div></div></div>
+    <div className="property-meta"><div><Link href={`/properties/${property.id}`} className="property-title" data-testid={`text-title-${property.id}`}>{property.title}</Link><div className="property-subtitle">{property.city}, {property.country} · {property.propertyType}</div>{reason?.[0] && <div className="property-subtitle" style={{ color: '#4f7161', marginTop: 7 }}><Sparkles size={12} style={{ verticalAlign: '-2px' }} /> {reason[0]}</div>}</div><div style={{ textAlign: 'right' }}><div className="rating-pill"><Star size={12} fill="#d66e4d" color="#d66e4d" /> {Number(property.averageRating) > 0 ? Number(property.averageRating).toFixed(1) : 'New'}</div><div className="property-price" style={{ marginTop: 9 }}>{money(property.pricePerNight)} <span>/ night</span></div></div></div>
   </article>;
 }
 
@@ -190,15 +213,18 @@ function HomePage() {
     <section className="hero-panel" data-testid="home-hero">
       <div className="hero-orbit" />
       <img className="hero-photo" src={featured[0]?.imageUrls?.[0] || 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1500&q=90'} alt="A sunlit Indian courtyard stay" />
-      <div className="hero-copy"><div className="eyebrow">Stay somewhere that gets you</div><h1 className="display-font" style={{ fontSize: 'clamp(42px,6vw,72px)', lineHeight: 1.02, margin: '18px 0' }}>Find your<br /><span style={{ color: '#d66e4d' }}>kind of away.</span></h1><p style={{ maxWidth: 390, color: '#53685e', lineHeight: 1.75 }}>Not just places to stay. Places that fit the way you travel, with every recommendation explained.</p><div style={{ marginTop: 27, display: 'flex', gap: 10, flexWrap: 'wrap' }}><span className="tag"><Sparkles size={12} style={{ verticalAlign: '-2px' }} /> Thoughtful matches</span><span className="tag"><ShieldCheck size={12} style={{ verticalAlign: '-2px' }} /> Clear, honest pricing</span></div></div>
+      <div className="hero-copy"><div className="eyebrow">Stay somewhere that gets you</div><h1 className="display-font" style={{ fontSize: 'clamp(42px,6vw,72px)', lineHeight: 1.02, margin: '18px 0' }}>Find your<br /><span style={{ color: '#d66e4d' }}>kind of away.</span></h1><p style={{ maxWidth: 390, color: '#53685e', lineHeight: 1.75 }}>Find a place that feels like yours. Not just somewhere to stay, but somewhere that fits the way you travel—with every recommendation explained.</p><div style={{ marginTop: 27, display: 'flex', gap: 10, flexWrap: 'wrap' }}><span className="tag"><Sparkles size={12} style={{ verticalAlign: '-2px' }} /> Thoughtful matches</span><span className="tag"><ShieldCheck size={12} style={{ verticalAlign: '-2px' }} /> Clear, honest pricing</span></div></div>
     </section>
     <div style={{ marginTop: -34, position: 'relative', zIndex: 3, padding: '0 26px' }}><SearchBar /></div>
     <SectionTitle eyebrow="A little more you" title="Stays with a good feeling" action={<Link href="/explore" className="btn-secondary" data-testid="link-all-stays">See all stays <ArrowRight size={15} /></Link>} />
     {home.isLoading ? <LoadingCards /> : home.isError ? <ErrorState retry={() => void home.refetch()} /> : <div className="property-grid">{recommendation.length ? recommendation.slice(0,3).map(item => <PropertyCard key={item.property.id} property={item.property} reason={item.reasons} score={item.score} />) : featured.slice(0,3).map(p => <PropertyCard key={p.id} property={p} />)}</div>}
+    <SectionTitle eyebrow="Find your kind of stay" title="Browse by style" />
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>{categories.map(category => <Link key={category.propertyType} href={`/explore?propertyType=${encodeURIComponent(category.propertyType)}`} className="chip" data-testid={`link-category-${category.propertyType.toLowerCase().replaceAll(' ', '-')}`}>{category.label} <ArrowRight size={14} /></Link>)}</div>
     <SectionTitle eyebrow="India, in all its moods" title="Where do you want to feel?" action={<Link href="/explore" className="nav-link" data-testid="link-explore-destinations">Explore every stay <ArrowRight size={14} /></Link>} />
     {destinations.isLoading ? <div className="destination-grid">{[0,1,2,3].map(i => <div key={i} className="skeleton destination-card" />)}</div> : destinations.isError ? <ErrorState retry={() => void destinations.refetch()} /> : <div className="destination-grid">{(destinations.data || []).slice(0,8).map((d, i) => <Link key={d.city} href={`/explore?city=${encodeURIComponent(d.city)}`} className="destination-card" data-testid={`card-destination-${i}`}><img src={d.imageUrl || fallbackImage} alt={`${d.city}, ${d.country}`} loading="lazy" /><div className="destination-caption"><b>{d.city}</b><small>{d.propertyCount} places to stay</small></div></Link>)}</div>}
     <section className="split-feature"><div><div className="eyebrow">A recommendation with reasons</div><h2 className="display-font" style={{ fontSize: 38, lineHeight: 1.12, margin: '13px 0' }}>Your taste has a place here.</h2><p style={{ color: '#607168', lineHeight: 1.75 }}>Tell us what makes a trip feel right. Stayora brings your preferences into the open, so you can see why each place made the list.</p><Link href="/preferences" className="btn-primary" style={{ marginTop: 12 }} data-testid="link-set-preferences">Set your travel style <ArrowRight size={15} /></Link></div><img className="feature-art" src="https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1000&q=85" alt="A warm, lived-in home interior" loading="lazy" /></section>
     <section style={{ marginTop: 58, padding: '30px 0', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 22 }}><div><div className="eyebrow">01 — Tell us what matters</div><p style={{ fontWeight: 700 }}>Your budget, your pace, your kind of place.</p></div><div><div className="eyebrow">02 — See the why</div><p style={{ fontWeight: 700 }}>Each match comes with reasons, not mystery.</p></div><div><div className="eyebrow">03 — Book with clarity</div><p style={{ fontWeight: 700 }}>Straightforward totals. No surprise maths.</p></div></section>
+    <section className="split-feature" style={{ marginTop: 56, background: '#e5ece2' }} data-testid="home-host-cta"><div><div className="eyebrow">A place to share</div><h2 className="display-font" style={{ fontSize: 36, lineHeight: 1.12, margin: '12px 0' }}>Have a place guests will love?</h2><p style={{ color: '#607168', lineHeight: 1.75 }}>Create a listing, set your details, and manage your stays from one simple host dashboard.</p><Link href="/host" className="btn-primary" style={{ marginTop: 12 }} data-testid="link-home-host">List your stay <ArrowRight size={15} /></Link></div><div className="feature-art" style={{ height: 240, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg,#d1dfd0,#f1e5cf)', borderRadius: 16, color: '#42695a' }}><Home size={62} strokeWidth={1.2} /></div></section>
   </main></Layout>;
 }
 
@@ -208,11 +234,12 @@ function ExplorePage() {
   const [query, setQuery] = useState(paramsFromUrl.get('q') || '');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
-  const [propertyType, setPropertyType] = useState('');
+  const [propertyType, setPropertyType] = useState(paramsFromUrl.get('propertyType') || '');
   const [guests, setGuests] = useState(paramsFromUrl.get('guests') || '');
   const [checkIn, setCheckIn] = useState(paramsFromUrl.get('checkIn') || '');
   const [checkOut, setCheckOut] = useState(paramsFromUrl.get('checkOut') || '');
   const [bedrooms, setBedrooms] = useState('');
+  const [bathrooms, setBathrooms] = useState('');
   const [sort, setSort] = useState('relevance');
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const apiParams = useMemo(() => ({
@@ -222,11 +249,12 @@ function ExplorePage() {
     propertyType: propertyType || undefined,
     guests: guests ? Number(guests) : undefined,
     bedrooms: bedrooms ? Number(bedrooms) : undefined,
+    bathrooms: bathrooms ? Number(bathrooms) : undefined,
     amenities: selectedAmenities.length ? selectedAmenities : undefined,
     checkIn: checkIn || undefined,
     checkOut: checkOut || undefined,
     sort: sort as 'relevance' | 'price_asc' | 'price_desc' | 'rating',
-  }), [query, city, minPrice, maxPrice, propertyType, guests, bedrooms, selectedAmenities, checkIn, checkOut, sort]);
+  }), [query, city, minPrice, maxPrice, propertyType, guests, bedrooms, bathrooms, selectedAmenities, checkIn, checkOut, sort]);
   const results = useGetProperties(apiParams);
   const recommendation = useGetRecommendations({ limit: 12, guests: guests ? Number(guests) : undefined });
   const toggleAmenity = (a: string) => setSelectedAmenities(v => v.includes(a) ? v.filter(x => x !== a) : [...v, a]);
@@ -237,7 +265,7 @@ function ExplorePage() {
     <SectionTitle eyebrow={`${results.data?.total ?? '—'} stays, with room for your kind of trip`} title={city ? `Around ${city}` : 'Explore stays'} action={<label style={{ display: 'flex', alignItems: 'center', gap: 8 }}><ArrowDownUp size={15} /><select className="input-control" value={sort} onChange={e => setSort(e.target.value)} style={{ width: 160 }} data-testid="select-sort"><option value="relevance">Recommended</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option><option value="rating">Top rated</option></select></label>} />
     <div className="filter-layout">
       <aside className="filter-box" data-testid="panel-filters">
-        <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><strong><SlidersHorizontal size={15} style={{ verticalAlign: '-3px', marginRight: 6 }} />Your filters</strong><button className="nav-link" style={{ border: 0, background: 'none', cursor: 'pointer' }} onClick={() => { setCity(''); setQuery(''); setMinPrice(''); setMaxPrice(''); setPropertyType(''); setGuests(''); setBedrooms(''); setSelectedAmenities([]); }} data-testid="button-clear-filters">Clear</button></div>
+        <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><strong><SlidersHorizontal size={15} style={{ verticalAlign: '-3px', marginRight: 6 }} />Your filters</strong><button className="nav-link" style={{ border: 0, background: 'none', cursor: 'pointer' }} onClick={() => { setCity(''); setQuery(''); setMinPrice(''); setMaxPrice(''); setPropertyType(''); setGuests(''); setCheckIn(''); setCheckOut(''); setBedrooms(''); setBathrooms(''); setSelectedAmenities([]); setSort('relevance'); }} data-testid="button-clear-filters">Clear</button></div>
         <div className="filter-group"><label className="field-label" htmlFor="filter-city">Destination</label><input id="filter-city" className="input-control" value={city} onChange={e => setCity(e.target.value)} placeholder="Any city" data-testid="input-filter-city" /></div>
         <div className="filter-group"><label className="field-label" htmlFor="filter-search">Search</label><input id="filter-search" className="input-control" value={query} onChange={e => setQuery(e.target.value)} placeholder="Name or neighbourhood" data-testid="input-filter-search" /></div>
         <div className="filter-group"><span className="field-label">Per night</span><div style={{ display: 'flex', gap: 8 }}><input className="input-control" type="number" min="0" value={minPrice} onChange={e => setMinPrice(e.target.value)} placeholder="Min ₹" data-testid="input-min-price" /><input className="input-control" type="number" min="0" value={maxPrice} onChange={e => setMaxPrice(e.target.value)} placeholder="Max ₹" data-testid="input-max-price" /></div></div>
@@ -246,10 +274,11 @@ function ExplorePage() {
         <div className="filter-group"><label className="field-label" htmlFor="filter-checkin">Check in</label><input id="filter-checkin" className="input-control" type="date" value={checkIn} onChange={e => setCheckIn(e.target.value)} data-testid="input-filter-check-in" /></div>
         <div className="filter-group"><label className="field-label" htmlFor="filter-checkout">Check out</label><input id="filter-checkout" className="input-control" type="date" value={checkOut} onChange={e => setCheckOut(e.target.value)} data-testid="input-filter-check-out" /></div>
         <div className="filter-group"><label className="field-label" htmlFor="filter-bedrooms">Bedrooms</label><select id="filter-bedrooms" className="input-control" value={bedrooms} onChange={e => setBedrooms(e.target.value)} data-testid="select-bedrooms"><option value="">Any</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>{n}+</option>)}</select></div>
+        <div className="filter-group"><label className="field-label" htmlFor="filter-bathrooms">Bathrooms</label><select id="filter-bathrooms" className="input-control" value={bathrooms} onChange={e => setBathrooms(e.target.value)} data-testid="select-bathrooms"><option value="">Any</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>{n}+</option>)}</select></div>
         <div style={{ gridColumn: '1/-1' }}><span className="field-label">Little comforts</span><div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>{amenities.map(a => <button key={a} className={`chip ${selectedAmenities.includes(a) ? 'selected' : ''}`} onClick={() => toggleAmenity(a)} data-testid={`button-amenity-${a.toLowerCase().replaceAll(' ', '-')}`}>{a}</button>)}</div></div>
       </aside>
       <div>
-        {results.isLoading ? <LoadingCards /> : results.isError ? <ErrorState retry={() => void results.refetch()} /> : resultsList.length ? <div className="property-grid">{resultsList.map(p => <PropertyCard key={p.id} property={p} />)}</div> : <div className="empty-state" data-testid="status-no-results"><Compass size={28} style={{ margin: '0 auto 12px' }} /><h3 className="display-font">No stays in this little corner yet</h3><p>Try opening up the dates, budget, or destination.</p><button className="btn-secondary" onClick={() => { setCity(''); setQuery(''); setMinPrice(''); setMaxPrice(''); setPropertyType(''); setGuests(''); setBedrooms(''); setSelectedAmenities([]); }} data-testid="button-reset-search">Reset your search</button></div>}
+        {results.isLoading ? <LoadingCards /> : results.isError ? <ErrorState retry={() => void results.refetch()} /> : resultsList.length ? <div className="property-grid">{resultsList.map(p => <PropertyCard key={p.id} property={p} />)}</div> : <div className="empty-state" data-testid="status-no-results"><Compass size={28} style={{ margin: '0 auto 12px' }} /><h3 className="display-font">No stays in this little corner yet</h3><p>Try opening up the dates, budget, or destination.</p><button className="btn-secondary" onClick={() => { setCity(''); setQuery(''); setMinPrice(''); setMaxPrice(''); setPropertyType(''); setGuests(''); setCheckIn(''); setCheckOut(''); setBedrooms(''); setBathrooms(''); setSelectedAmenities([]); setSort('relevance'); }} data-testid="button-reset-search">Reset your search</button></div>}
         {recommendation.data?.items?.length ? <section style={{ marginTop: 45 }}><div className="eyebrow">A few ideas based on your taste</div><p style={{ color: '#728078', fontSize: 12 }}>{recommendation.data.general ? 'Browse popular stays while your preferences take shape.' : `Recommendations ranked by ${recommendation.data.method}.`}</p><div className="property-grid" style={{ marginTop: 18 }}>{recommendation.data.items.slice(0,3).map(item => <PropertyCard key={item.property.id} property={item.property} score={item.score} reason={item.reasons} />)}</div></section> : null}
       </div>
     </div>
@@ -258,8 +287,13 @@ function ExplorePage() {
 
 function PropertyPage() {
   const { propertyId = '' } = useParams<{ propertyId: string }>();
+  const { isLoaded, isSignedIn } = useAuth();
+  const [, setLocation] = useLocation();
   const property = useGetProperty(propertyId);
   const reviews = useGetPropertyReviews(propertyId);
+  const wishlist = useGetWishlist({ query: { enabled: isLoaded && isSignedIn === true } });
+  const addWishlist = useAddWishlist();
+  const removeWishlist = useRemoveWishlist();
   const createBooking = useCreateBooking();
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
@@ -267,9 +301,26 @@ function PropertyPage() {
   const [success, setSuccess] = useState('');
   const qc = useQueryClient();
   const p = property.data;
+  const isSaved = Boolean(wishlist.data?.some(item => item.id === propertyId));
+  const wishlistBusy = addWishlist.isPending || removeWishlist.isPending;
+  const toggleWishlist = () => {
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      setLocation('/sign-in');
+      return;
+    }
+    const callbacks = { onSuccess: () => void qc.invalidateQueries({ queryKey: getGetWishlistQueryKey() }) };
+    if (isSaved) removeWishlist.mutate({ propertyId }, callbacks);
+    else addWishlist.mutate({ data: { propertyId } }, callbacks);
+  };
   const nights = checkIn && checkOut ? Math.max(0, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000)) : 0;
   const book = (e: FormEvent) => {
     e.preventDefault();
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      setLocation('/sign-in');
+      return;
+    }
     if (!checkIn || !checkOut || nights < 1) return;
     createBooking.mutate({ data: { propertyId, checkIn, checkOut, guests } }, {
       onSuccess: booking => {
@@ -283,7 +334,7 @@ function PropertyPage() {
   const photos = p.imageUrls?.length ? [...p.imageUrls, ...p.imageUrls, ...p.imageUrls].slice(0, 5) : [fallbackImage, fallbackImage, fallbackImage, fallbackImage, fallbackImage];
   return <Layout><main className="page-wrap page-enter">
     <Link href="/explore" className="nav-link" data-testid="link-back-explore"><ArrowLeft size={14} style={{ verticalAlign: '-2px' }} /> Back to explore</Link>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', gap: 12, margin: '22px 0 18px' }}><div><div className="eyebrow">{p.propertyType} · {p.city}, {p.country}</div><h1 className="display-font" style={{ fontSize: 'clamp(32px,4vw,47px)', margin: '8px 0' }} data-testid="text-property-title">{p.title}</h1><span className="rating-pill"><Star size={13} fill="#d66e4d" color="#d66e4d" /> {p.averageRating} · {p.reviewCount} reviews <MapPin size={13} style={{ marginLeft: 8 }} /> {p.address}</span></div><button className="btn-secondary" onClick={() => navigator.share?.({ title: p.title, url: window.location.href })} data-testid="button-share-property">Share stay</button></div>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', gap: 12, margin: '22px 0 18px', flexWrap: 'wrap' }}><div><div className="eyebrow">{p.propertyType} · {p.city}, {p.country}</div><h1 className="display-font" style={{ fontSize: 'clamp(32px,4vw,47px)', margin: '8px 0' }} data-testid="text-property-title">{p.title}</h1><span className="rating-pill"><Star size={13} fill="#d66e4d" color="#d66e4d" /> {Number(p.averageRating) > 0 ? Number(p.averageRating).toFixed(1) : 'New'} · {p.reviewCount} reviews <MapPin size={13} style={{ marginLeft: 8 }} /> {p.address}</span></div><div style={{ display: 'flex', gap: 8 }}><button className="btn-secondary" onClick={() => navigator.share?.({ title: p.title, url: window.location.href })} data-testid="button-share-property">Share stay</button><button className="btn-secondary" onClick={toggleWishlist} disabled={!isLoaded || wishlistBusy} data-testid="button-property-wishlist"><Heart size={15} fill={isSaved ? '#d66e4d' : 'none'} color={isSaved ? '#d66e4d' : 'currentColor'} /> {isSaved ? 'Saved' : 'Add to wishlist'}</button></div></div>
     <div className="detail-photos" data-testid="property-gallery">{photos.map((src, i) => <img key={`${src}-${i}`} src={src} alt={`${p.title}, view ${i + 1}`} />)}</div>
     <div className="detail-grid" style={{ marginTop: 35 }}>
       <div><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 24, borderBottom: '1px solid #e5dfd3' }}><div><h2 className="display-font" style={{ fontSize: 24, margin: 0 }}>Hosted by {p.hostName}</h2><p style={{ color: '#718078', fontSize: 13, marginBottom: 0 }}>{p.maxGuests} guests · {p.bedrooms} bedrooms · {p.bathrooms} bathrooms</p></div><span className="tag"><BadgeCheck size={13} style={{ verticalAlign: '-2px' }} /> Stayora host</span></div>
@@ -441,11 +492,16 @@ function AdminPage() {
   return <Layout><main className="page-wrap page-enter"><div className="eyebrow">Behind the good stays</div><h1 className="display-font" style={{ fontSize: 48, margin: '8px 0' }}>Stayora, in view.</h1><p style={{ color: '#728078' }}>A clear-eyed look at the marketplace and how well the matches are working.</p>
     {overview.isLoading ? <div className="dashboard-stats">{[1,2,3,4].map(i => <div key={i} className="skeleton stat-card" style={{ height: 115 }} />)}</div> : overview.isError ? <ErrorState retry={() => void overview.refetch()} /> : <><div className="dashboard-stats" style={{ marginTop: 28 }}>{[['Guests',stat?.userCount],['Stays',stat?.propertyCount],['Bookings',stat?.bookingCount],['Guest notes',stat?.reviewCount]].map(([label,value]) => <div className="stat-card" key={label as string} data-testid={`stat-${String(label).toLowerCase().replaceAll(' ','-')}`}><span className="eyebrow">{label}</span><div className="stat-value">{value}</div><span style={{ color: '#78847c', fontSize: 11 }}>Across Stayora</span></div>)}</div>
     <SectionTitle eyebrow="The marketplace at a glance" title="Booking rhythm" />
-    <div style={{ background: '#fffdf8', border: '1px solid #e6dfd1', borderRadius: 18, padding: 22, display: 'flex', alignItems: 'end', gap: 12, minHeight: 180 }} data-testid="chart-booking-trend">{stat?.bookingTrend?.map((point, i) => <div key={`${point.label}-${i}`} style={{ flex: 1, textAlign: 'center' }}><div style={{ height: 118, display: 'flex', alignItems: 'end', justifyContent: 'center' }}><div title={`${point.bookings} bookings`} style={{ width: '55%', maxWidth: 45, height: `${Math.max(5, Math.min(100, point.bookings * 10))}%`, background: i % 2 ? '#d66e4d' : '#42695a', borderRadius: '7px 7px 2px 2px', transition: 'transform .2s' }} /></div><small style={{ color: '#77847b' }}>{point.label}</small></div>)}</div>
+    <div style={{ background: '#fffdf8', border: '1px solid #e6dfd1', borderRadius: 18, padding: 18, height: 250 }} data-testid="chart-booking-trend" role="img" aria-label="Booking trends over the last six months"><ResponsiveContainer width="100%" height="100%"><BarChart data={stat?.bookingTrend || []} margin={{ top: 6, right: 12, left: -18, bottom: 0 }}><CartesianGrid stroke="#e8e1d6" vertical={false} /><XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} /><YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} /><Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e6dfd1', background: '#fffdf8' }} /><Bar dataKey="bookings" name="Bookings" fill="#42695a" radius={[7, 7, 0, 0]} maxBarSize={46} /></BarChart></ResponsiveContainer></div>
     </>
     }
     <SectionTitle eyebrow="Trust, measured" title="Recommendation research" action={<button className="btn-primary" onClick={startEvaluation} disabled={runEval.isPending} data-testid="button-run-evaluation">{runEval.isPending ? 'Running evaluation…' : 'Run evaluation'} <Sparkles size={15} /></button>} />
-    {latest.isLoading ? <div className="skeleton" style={{ height: 190, borderRadius: 18 }} /> : latest.isError ? <div className="notice" data-testid="status-no-evaluation">No evaluation has been run yet. Run one to see how personalized matches compare with the baseline.</div> : latest.data && <div className="dashboard-stats" style={{ gridTemplateColumns: 'repeat(3,1fr)' }} data-testid="panel-latest-evaluation">{[['Personalized precision@5',latest.data.personalizedPrecisionAt5],['Baseline precision@5',latest.data.baselinePrecisionAt5],['Personalized NDCG@5',latest.data.personalizedNdcgAt5],['Baseline NDCG@5',latest.data.baselineNdcgAt5],['Average response',`${latest.data.averageRecommendationMs} ms`],['Evaluated',displayDate(latest.data.evaluatedAt)]].map(([l,v]) => <div className="stat-card" key={String(l)}><span className="eyebrow">{l}</span><div className="stat-value" style={{ fontSize: 23 }}>{typeof v === 'number' ? v.toFixed(3) : v}</div></div>)}</div>}
+    {latest.isLoading ? <div className="skeleton" style={{ height: 190, borderRadius: 18 }} /> : latest.isError ? <div className="notice" data-testid="status-no-evaluation">No evaluation has been run yet. Run one to see how personalized matches compare with the baseline.</div> : latest.data && <div className="dashboard-stats" style={{ gridTemplateColumns: 'repeat(3,1fr)' }} data-testid="panel-latest-evaluation">{[['Personalized precision@5',latest.data.personalizedPrecisionAt5],['Baseline precision@5',latest.data.baselinePrecisionAt5],['Personalized NDCG@5',latest.data.personalizedNdcgAt5],['Baseline NDCG@5',latest.data.baselineNdcgAt5],['Average ranker time',`${latest.data.averageRecommendationMs.toFixed(2)} ms`],['Synthetic users',latest.data.usersEvaluated],['Properties evaluated',latest.data.propertiesEvaluated],['Evaluated',displayDate(latest.data.evaluatedAt)]].map(([l,v]) => <div className="stat-card" key={String(l)}><span className="eyebrow">{l}</span><div className="stat-value" style={{ fontSize: 23 }}>{typeof v === 'number' ? v.toFixed(3) : v}</div></div>)}</div>}
+    {latest.data && <section style={{ marginTop: 26 }} data-testid="evaluation-comparison">
+      <SectionTitle eyebrow="Research comparison" title="Personalized ranking vs rating baseline" />
+      <div style={{ background: '#fffdf8', border: '1px solid #e6dfd1', borderRadius: 18, padding: 18, height: 275 }} data-testid="chart-recommendation-comparison" role="img" aria-label="Precision and nDCG comparison between personalized ranking and rating baseline"><ResponsiveContainer width="100%" height="100%"><BarChart data={[{ metric: 'Precision@5', personalized: latest.data.personalizedPrecisionAt5, baseline: latest.data.baselinePrecisionAt5 }, { metric: 'nDCG@5', personalized: latest.data.personalizedNdcgAt5, baseline: latest.data.baselineNdcgAt5 }]} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}><CartesianGrid stroke="#e8e1d6" vertical={false} /><XAxis dataKey="metric" tickLine={false} axisLine={false} fontSize={12} /><YAxis domain={[0, 1]} allowDecimals tickLine={false} axisLine={false} fontSize={11} /><Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e6dfd1', background: '#fffdf8' }} /><Legend /><Bar dataKey="personalized" name="Personalized" fill="#42695a" radius={[7, 7, 0, 0]} maxBarSize={48} /><Bar dataKey="baseline" name="Rating baseline" fill="#d66e4d" radius={[7, 7, 0, 0]} maxBarSize={48} /></BarChart></ResponsiveContainer></div>
+      <div className="table-wrap" style={{ marginTop: 16 }}><table className="data-table" data-testid="table-evaluation-results"><thead><tr><th>Method</th><th>Precision@5</th><th>nDCG@5</th><th>Average ranker time</th></tr></thead><tbody><tr><th>Personalized weighted ranker</th><td>{latest.data.personalizedPrecisionAt5.toFixed(3)}</td><td>{latest.data.personalizedNdcgAt5.toFixed(3)}</td><td>{latest.data.averageRecommendationMs.toFixed(2)} ms</td></tr><tr><th>Rating / review-count baseline</th><td>{latest.data.baselinePrecisionAt5.toFixed(3)}</td><td>{latest.data.baselineNdcgAt5.toFixed(3)}</td><td>Not measured</td></tr></tbody></table></div>
+    </section>}
     {latest.data && <p style={{ color: '#77847b', fontSize: 11 }}>Precision: {latest.data.precisionConvention} · Relevance: {latest.data.relevanceScale} · {latest.data.syntheticData ? 'Synthetic evaluation data' : 'Live marketplace data'} · {latest.data.usersEvaluated} travelers, {latest.data.propertiesEvaluated} stays</p>}
     {runEval.isError && <p role="alert" style={{ color: '#ae4a3c' }} data-testid="status-evaluation-error">Evaluation could not complete. Please try again.</p>}
     <SectionTitle eyebrow="On the map" title="Popular stays" />
@@ -457,12 +513,97 @@ function AdminPage() {
     {users.isLoading ? <div className="skeleton" style={{ height: 210, borderRadius: 17 }} data-testid="loading-admin-users" /> : users.isError ? <ErrorState message="We couldn’t load the user directory." retry={() => void users.refetch()} /> : users.data?.length ? <div className="table-wrap"><table className="data-table" data-testid="table-admin-users"><thead><tr><th>Person</th><th>Email</th><th>Joined</th><th>Stayora role</th></tr></thead><tbody>{users.data.map(user => <tr key={user.id} data-testid={`row-admin-user-${user.id}`}><td data-testid={`text-admin-user-name-${user.id}`}>{user.name}</td><td>{user.email}</td><td>{displayDate(user.createdAt)}</td><td><select className="input-control" value={user.role} disabled={updateRole.isPending} aria-label={`Change role for ${user.name}`} onChange={e => changeRole(user.id, e.target.value as 'guest' | 'host' | 'admin')} data-testid={`select-admin-user-role-${user.id}`}><option value="guest">Guest</option><option value="host">Host</option><option value="admin">Admin</option></select></td></tr>)}</tbody></table>{updateRole.isPending && <p style={{ padding: '0 17px', color: '#718078', fontSize: 12 }} role="status" data-testid="status-admin-role-saving">Updating account role…</p>}</div> : <div className="empty-state" data-testid="status-admin-users-empty"><Users size={25} style={{ margin: '0 auto 10px' }} /><p>No users to manage yet.</p></div>}
 
     <SectionTitle eyebrow="Marketplace stewardship" title="Property moderation" />
-    {properties.isLoading ? <div className="skeleton" style={{ height: 210, borderRadius: 17 }} data-testid="loading-admin-properties" /> : properties.isError ? <ErrorState message="We couldn’t load the property review list." retry={() => void properties.refetch()} /> : properties.data?.length ? <div className="table-wrap"><table className="data-table" data-testid="table-admin-properties"><thead><tr><th>Stay</th><th>Host</th><th>Location</th><th>Nightly price</th><th>Rating</th><th>Moderation</th></tr></thead><tbody>{properties.data.map(property => <tr key={property.id} data-testid={`row-admin-property-${property.id}`}><td><Link href={`/properties/${property.id}`} className="nav-link" data-testid={`link-admin-property-${property.id}`}>{property.title}</Link></td><td>{property.hostName}</td><td>{property.city}, {property.country}</td><td>{money(property.pricePerNight)}</td><td><span className="rating-pill"><Star size={12} fill="#d66e4d" color="#d66e4d" /> {property.averageRating?.toFixed?.(1) || property.averageRating || 'New'}</span></td><td><button className="btn-secondary" onClick={() => moderateProperty(property.id, property.title)} disabled={deleteProperty.isPending} data-testid={`button-moderate-property-${property.id}`}>{deleteProperty.isPending ? 'Working…' : 'Remove stay'}</button></td></tr>)}</tbody></table>{deleteProperty.isPending && <p style={{ padding: '0 17px', color: '#718078', fontSize: 12 }} role="status" data-testid="status-admin-property-removing">Updating the marketplace…</p>}</div> : <div className="empty-state" data-testid="status-admin-properties-empty"><Home size={25} style={{ margin: '0 auto 10px' }} /><p>No properties need review.</p></div>}
+    {properties.isLoading ? <div className="skeleton" style={{ height: 210, borderRadius: 17 }} data-testid="loading-admin-properties" /> : properties.isError ? <ErrorState message="We couldn’t load the property review list." retry={() => void properties.refetch()} /> : properties.data?.length ? <div className="table-wrap"><table className="data-table" data-testid="table-admin-properties"><thead><tr><th>Stay</th><th>Host</th><th>Location</th><th>Nightly price</th><th>Rating</th><th>Moderation</th></tr></thead><tbody>{properties.data.map(property => <tr key={property.id} data-testid={`row-admin-property-${property.id}`}><td><Link href={`/properties/${property.id}`} className="nav-link" data-testid={`link-admin-property-${property.id}`}>{property.title}</Link></td><td>{property.hostName}</td><td>{property.city}, {property.country}</td><td>{money(property.pricePerNight)}</td><td><span className="rating-pill"><Star size={12} fill="#d66e4d" color="#d66e4d" /> {Number(property.averageRating) > 0 ? Number(property.averageRating).toFixed(1) : 'New'}</span></td><td><button className="btn-secondary" onClick={() => moderateProperty(property.id, property.title)} disabled={deleteProperty.isPending} data-testid={`button-moderate-property-${property.id}`}>{deleteProperty.isPending ? 'Working…' : 'Remove stay'}</button></td></tr>)}</tbody></table>{deleteProperty.isPending && <p style={{ padding: '0 17px', color: '#718078', fontSize: 12 }} role="status" data-testid="status-admin-property-removing">Updating the marketplace…</p>}</div> : <div className="empty-state" data-testid="status-admin-properties-empty"><Home size={25} style={{ margin: '0 auto 10px' }} /><p>No properties need review.</p></div>}
   </main></Layout>;
 }
 
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  if (!isLoaded) {
+    return <Layout><main className="page-wrap"><div className="skeleton" style={{ height: 220, borderRadius: 18 }} role="status" aria-label="Checking your account" /></main></Layout>;
+  }
+  if (!isSignedIn) {
+    return <Layout><main className="page-wrap page-enter"><div className="empty-state"><ShieldCheck size={28} style={{ margin: '0 auto 12px' }} /><h1 className="display-font">Sign in to make this yours.</h1><p>Your saved stays, trips, and travel style are available with a Stayora account.</p><Link href="/sign-in" className="btn-primary" data-testid="link-access-sign-in">Sign in <ArrowRight size={15} /></Link></div></main></Layout>;
+  }
+  return <>{children}</>;
+}
+
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const me = useGetMe({ query: { enabled: isLoaded && isSignedIn === true } });
+  if (!isLoaded || (isSignedIn && me.isLoading)) {
+    return <Layout><main className="page-wrap"><div className="skeleton" style={{ height: 220, borderRadius: 18 }} role="status" aria-label="Checking administrator access" /></main></Layout>;
+  }
+  if (!isSignedIn) {
+    return <Layout><main className="page-wrap page-enter"><div className="empty-state"><ShieldCheck size={28} style={{ margin: '0 auto 12px' }} /><h1 className="display-font">Administrator sign-in required.</h1><p>Sign in with an administrator account to continue.</p><Link href="/sign-in" className="btn-primary" data-testid="link-admin-sign-in">Sign in <ArrowRight size={15} /></Link></div></main></Layout>;
+  }
+  if (me.isError) {
+    return <Layout><main className="page-wrap"><ErrorState message="We couldn’t verify administrator access." retry={() => void me.refetch()} /></main></Layout>;
+  }
+  if (me.data?.role !== 'admin') {
+    return <Layout><main className="page-wrap page-enter"><div className="empty-state" role="alert" data-testid="status-admin-forbidden"><ShieldCheck size={28} style={{ margin: '0 auto 12px' }} /><h1 className="display-font">This area is for administrators.</h1><p>Your account does not have administrator access.</p></div></main></Layout>;
+  }
+  return <>{children}</>;
+}
+
+const infoPages = {
+  '/about': {
+    eyebrow: 'About Stayora',
+    title: 'A more personal way to find a stay.',
+    paragraphs: [
+      'Stayora is a vacation-rental marketplace project built around clear preferences, transparent prices, and recommendations with reasons.',
+      'Its matching system is a deterministic weighted scoring method, not a machine-learning or generative AI model.',
+    ],
+  },
+  '/contact': {
+    eyebrow: 'Contact',
+    title: 'A demo without a support inbox.',
+    paragraphs: [
+      'This Replit project does not collect or send contact requests. For project questions, contact the project owner through the workspace.',
+      'Do not enter payment details or sensitive personal information; Stayora does not process payments.',
+    ],
+  },
+  '/privacy': {
+    eyebrow: 'Privacy',
+    title: 'What this demo stores.',
+    paragraphs: [
+      'Clerk manages authentication. Stayora stores the application profile, saved preferences, wishlists, bookings, and reviews in its development database.',
+      'Demo properties and research profiles are synthetic. Avoid using sensitive personal information in this project.',
+    ],
+  },
+  '/terms': {
+    eyebrow: 'Terms',
+    title: 'A project demo, not a real reservation service.',
+    paragraphs: [
+      'Listings, reservations, and prices are demonstrations. A booking is stored with a demo payment status; no payment is taken and no stay is arranged.',
+      'Property photos are external demo image URLs. This project does not provide image uploads or verify real-world accommodation.',
+    ],
+  },
+  '/help': {
+    eyebrow: 'Help',
+    title: 'Finding your way around.',
+    paragraphs: [
+      'Search stays by destination, dates, guests, nightly price, stay type, bedrooms, bathrooms, and amenities. Sign in to save stays, preferences, and demo bookings.',
+      'Hosts can create and manage their own listings. Administrator access is assigned to a verified Clerk account using the project’s Replit Secrets configuration.',
+    ],
+  },
+} as const;
+
+function InfoPage() {
+  const [path] = useLocation();
+  const page = infoPages[path as keyof typeof infoPages] ?? infoPages['/help'];
+  return <Layout><main className="page-wrap page-enter" style={{ maxWidth: 850, minHeight: '55vh' }}><Link href="/" className="nav-link" data-testid="link-info-home"><ArrowLeft size={14} /> Back to stays</Link><div className="eyebrow" style={{ marginTop: 36 }}>{page.eyebrow}</div><h1 className="display-font" style={{ fontSize: 'clamp(36px,5vw,54px)', margin: '8px 0 20px' }}>{page.title}</h1>{page.paragraphs.map((paragraph, index) => <p key={index} style={{ color: '#64746b', lineHeight: 1.85, maxWidth: 700 }}>{paragraph}</p>)}</main></Layout>;
+}
+
+function ProtectedWishlistPage() { return <RequireAuth><WishlistPage /></RequireAuth>; }
+function ProtectedBookingsPage() { return <RequireAuth><BookingsPage /></RequireAuth>; }
+function ProtectedHostPage() { return <RequireAuth><HostPage /></RequireAuth>; }
+function ProtectedAdminPage() { return <RequireAdmin><AdminPage /></RequireAdmin>; }
+function ProtectedProfilePage() { return <RequireAuth><ProfilePage /></RequireAuth>; }
+function ProtectedPreferencesPage() { return <RequireAuth><PreferencesPage /></RequireAuth>; }
+
 function LandingRedirect() {
-  return <><SignedIn><Redirect to="/bookings" /></SignedIn><SignedOut><HomePage /></SignedOut></>;
+  return <><Show when="signed-in"><Redirect to="/bookings" /></Show><Show when="signed-out"><HomePage /></Show></>;
 }
 
 function SignInPage() {
@@ -511,12 +652,17 @@ function ClerkRoutes() {
         <Route path="/" component={LandingRedirect} />
         <Route path="/explore" component={ExplorePage} />
         <Route path="/properties/:propertyId" component={PropertyPage} />
-        <Route path="/wishlist" component={WishlistPage} />
-        <Route path="/bookings" component={BookingsPage} />
-        <Route path="/host" component={HostPage} />
-        <Route path="/admin" component={AdminPage} />
-        <Route path="/profile" component={ProfilePage} />
-        <Route path="/preferences" component={PreferencesPage} />
+        <Route path="/wishlist" component={ProtectedWishlistPage} />
+        <Route path="/bookings" component={ProtectedBookingsPage} />
+        <Route path="/host" component={ProtectedHostPage} />
+        <Route path="/admin" component={ProtectedAdminPage} />
+        <Route path="/profile" component={ProtectedProfilePage} />
+        <Route path="/preferences" component={ProtectedPreferencesPage} />
+        <Route path="/about" component={InfoPage} />
+        <Route path="/contact" component={InfoPage} />
+        <Route path="/privacy" component={InfoPage} />
+        <Route path="/terms" component={InfoPage} />
+        <Route path="/help" component={InfoPage} />
         <Route path="/sign-in/*?" component={SignInPage} />
         <Route path="/sign-up/*?" component={SignUpPage} />
         <Route component={NotFound} />

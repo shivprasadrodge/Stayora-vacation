@@ -3,6 +3,7 @@ import express from "express";
 import {
   afterAll,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -193,6 +194,56 @@ describe("Stayora API authorization and booking routes", () => {
       },
     });
     expect(response.status).toBe(400);
+  });
+
+  it("rejects a booking that exceeds the server-side guest capacity", async () => {
+    setSignedInUser(secondGuest);
+    const response = await request("/bookings", {
+      method: "POST",
+      body: {
+        propertyId,
+        checkIn: "2050-01-10",
+        checkOut: "2050-01-11",
+        guests: 5,
+      },
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it("creates a demo booking using the server rate and returns the same booking on retry", async () => {
+    setSignedInUser(secondGuest);
+    const body = {
+      propertyId,
+      checkIn: "2050-02-01",
+      checkOut: "2050-02-04",
+      guests: 2,
+    };
+    const firstResponse = await request("/bookings", {
+      method: "POST",
+      body,
+    });
+    expect(firstResponse.status).toBe(201);
+    const firstBooking = (await firstResponse.json()) as {
+      id: string;
+      totalPrice: number;
+      paymentStatus: string;
+    };
+    expect(firstBooking.totalPrice).toBe(30_000);
+    expect(firstBooking.paymentStatus).toBe("demo_booking");
+
+    const retryResponse = await request("/bookings", {
+      method: "POST",
+      body,
+    });
+    expect(retryResponse.status).toBe(201);
+    const retriedBooking = (await retryResponse.json()) as { id: string };
+    expect(retriedBooking.id).toBe(firstBooking.id);
+
+    const storedBooking = await db.booking.findUnique({
+      where: { id: firstBooking.id },
+    });
+    expect(storedBooking?.totalPrice).toBe(30_000);
+    expect(storedBooking?.paymentStatus).toBe("demo_booking");
   });
 
   it("rejects a booking that overlaps an existing confirmed stay", async () => {
